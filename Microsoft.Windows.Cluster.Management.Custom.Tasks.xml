@@ -55,13 +55,15 @@ If($NodeStateInfo)
 {
     foreach($StateInfo in $NodeStateInfo)
     {
+        $FileReason = ''
+        $BlockReason = ''
         If($StateInfo.FileSystemRedirectedIOReason -ne 'NotFileSystemRedirected' -and $StateInfo.FileSystemRedirectedIOReason -ne '')
         {
-            $FileReason =  ' (' + $StateInfo.FileSystemRedirectedIOReason + ')'
+            $FileReason = ' (' + $StateInfo.FileSystemRedirectedIOReason + ')'
         }
         If($StateInfo.BlockRedirectedIOReason -ne 'NotBlockRedirected' -and $StateInfo.BlockRedirectedIOReason -ne '')
         {
-            $BlockReason =  ' (' + $StateInfo.BlockRedirectedIOReason + ')'
+            $BlockReason = ' (' + $StateInfo.BlockRedirectedIOReason + ')'
         }
         Write-Host "Volume $($StateInfo.Name) on Node $NodeName has state $($StateInfo.StateInfo)$FileReason$BlockReason"
     }
