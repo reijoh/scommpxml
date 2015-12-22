@@ -44,7 +44,7 @@ Param
 $ErrorActionPreference = 'Stop'
 Try
 {
-    $NodeStateInfo = Get-ClusterSharedVolumeState -Cluster $ClusterName -Node $NodeName -WarningAction SilentlyContinue|where{$_.StateInfo -ne 'Direct' -or $_.FileSystemRedirectedIOReason -ne 'NotFileSystemRedirected' -or $_.BlockRedirectedIOReason -ne 'NotBlockRedirected'}|select Name,StateInfo,FileSystemRedirectedIOReason,BlockRedirectedIOReason
+    $NodeStateInfo = Get-ClusterSharedVolumeState -Cluster $ClusterName -Node $NodeName -WarningAction SilentlyContinue|where{$_.StateInfo -ne 'Direct' -or $_.FileSystemRedirectedIOReason -ne 'NotFileSystemRedirected' -or $_.BlockRedirectedIOReason -ne 'NotBlockRedirected'}|select Name,StateInfo,FileSystemRedirectedIOReason,BlockRedirectedIOReason|sort Name
 }
 Catch
 {
@@ -100,6 +100,69 @@ Exit
         <OutputType>Windows!Microsoft.Windows.SerializedObjectData</OutputType>
         <InputType>System!System.BaseData</InputType>
       </ProbeActionModuleType>
+      <ProbeActionModuleType ID="FKA.GetClusterResourceState.Task.PA" Accessibility="Internal" Batching="false" PassThrough="false">
+        <Configuration>
+          <xsd:element minOccurs="1" name="ClusterName" type="xsd:string" />
+          <xsd:element minOccurs="1" name="NodeName" type="xsd:string" />
+        </Configuration>
+        <ModuleImplementation Isolation="Any">
+          <Composite>
+            <MemberModules>
+              <ProbeAction ID="POSH" TypeID="Windows!Microsoft.Windows.PowerShellProbe">
+                <ScriptName>Get-ClusterResourceStateTask.ps1</ScriptName>
+                <ScriptBody>
+Param
+(
+    [string]$ClusterName,
+    [string]$NodeName
+)
+$ErrorActionPreference = 'Stop'
+Try
+{
+    $ResourceStateInfo = Get-ClusterResource -Cluster $ClusterName -WarningAction SilentlyContinue|where{$_.State -ne 'Online' -and $_.Name -notmatch 'TEMPLATE' -and $_.OwnerNode -eq $NodeName -and $_.MaintenanceMode -eq $False}|select State,Name,ResourceType|sort Name
+}
+Catch
+{
+    Throw ('Exception on line ' + $_.InvocationInfo.ScriptLineNumber + ' column ' + $_.InvocationInfo.OffsetInLine + ': ' + $_.Exception.Message)
+}
+Write-Host "`n"
+If($ResourceStateInfo)
+{
+    foreach($StateInfo in $ResourceStateInfo)
+    {
+        Write-Host "Resource $($StateInfo.Name) on Node $NodeName is $($StateInfo.State)"
+    }
+    Remove-Variable ResourceStateInfo -ErrorAction SilentlyContinue
+}
+Else
+{
+    Write-Host "All reources on node $NodeName are Online"
+}
+Write-Host "`n"
+Exit
+</ScriptBody>
+                <Parameters>
+                  <Parameter>
+                    <Name>ClusterName</Name>
+                    <Value>$Config/ClusterName$</Value>
+                  </Parameter>
+                  <Parameter>
+                    <Name>NodeName</Name>
+                    <Value>$Config/NodeName$</Value>
+                  </Parameter>
+                </Parameters>
+                <TimeoutSeconds>90</TimeoutSeconds>
+                <StrictErrorHandling>true</StrictErrorHandling>
+              </ProbeAction>
+            </MemberModules>
+            <Composition>
+              <Node ID="POSH" />
+            </Composition>
+          </Composite>
+        </ModuleImplementation>
+        <OutputType>Windows!Microsoft.Windows.SerializedObjectData</OutputType>
+        <InputType>System!System.BaseData</InputType>
+      </ProbeActionModuleType>
     </ModuleTypes>
   </TypeDefinitions>
   <Monitoring>
@@ -107,6 +170,13 @@ Exit
       <Task ID="Cluster.Management.Custom.GetClusterSharedVolumeState.Task" Accessibility="Internal" Enabled="true" Target="ClusLibrary!Microsoft.Windows.Cluster.Monitoring.Service" Timeout="300" Remotable="true">
         <Category>Custom</Category>
         <ProbeAction ID="PA" TypeID="Cluster.Management.Custom.GetClusterSharedVolumeState.Task.PA">
+          <ClusterName>$Target/Property[Type="ClusLibrary!Microsoft.Windows.Cluster.Monitoring.Service"]/ClusterName$</ClusterName>
+          <NodeName>$Target/Host/Property[Type="Windows!Microsoft.Windows.Computer"]/NetbiosComputerName$</NodeName>
+        </ProbeAction>
+      </Task>
+      <Task ID="FKA.GetClusterResourceState.Task" Accessibility="Internal" Enabled="true" Target="ClusLibrary!Microsoft.Windows.Cluster.Monitoring.Service" Timeout="300" Remotable="true">
+        <Category>Custom</Category>
+        <ProbeAction ID="PA" TypeID="FKA.GetClusterResourceState.Task.PA">
           <ClusterName>$Target/Property[Type="ClusLibrary!Microsoft.Windows.Cluster.Monitoring.Service"]/ClusterName$</ClusterName>
           <NodeName>$Target/Host/Property[Type="Windows!Microsoft.Windows.Computer"]/NetbiosComputerName$</NodeName>
         </ProbeAction>
@@ -124,6 +194,12 @@ Exit
         </DisplayString>
         <DisplayString ElementID="Cluster.Management.Custom.GetClusterSharedVolumeState.Task">
           <Name>Get Cluster Shared Volume State</Name>
+        </DisplayString>
+        <DisplayString ElementID="FKA.GetClusterResourceState.Task.PA">
+          <Name>FKA.GetClusterResourceState.Task.PA</Name>
+        </DisplayString>
+        <DisplayString ElementID="FKA.GetClusterResourceState.Task">
+          <Name>Get Cluster Resource Status</Name>
         </DisplayString>
       </DisplayStrings>
     </LanguagePack>
